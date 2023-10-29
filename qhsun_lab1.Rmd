@@ -1,0 +1,163 @@
+---
+title: "Research on California Ground Deformation"
+author: "Chi Sun"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Context
+
+California's located at the boundary of the Pacific Plate and the North American Plate. That results in ongoing crustal movements, and is a crucial area of study.
+
+Preliminary examination of the historic geodetic record has disclosed crustal uplift of 0.15 to 0.25 meter that apparently began around 1960 and has since grown to include at least 12,000 square kilometers of southern California.
+[Aseismic uplift in Southern California](https://www.usgs.gov/publications/aseismic-uplift-southern-california)
+
+## Data Source
+
+### USGS GPS Monitored Ground Deformation Data
+
+For this part of data, we can download it through [USGS Earthquake Hazard Program](https://earthquake.usgs.gov/monitoring/gps/CentralCalifornia_ITRF2014)
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/USGS_GPS.png)
+
+For a greater coverage of the research area, we need to combine three parts of data:
+
+- Central California
+- Soutern California
+- Long Valley
+
+For each part of the data, we need to download two files:
+
+- **.xyz flie** : It contains the GPS stations daily observation of local position, in terms of x,y,z. We use this data to calculate the elevation difference.
+
+- **waypoint.gpx file** : It contains point features of GPS station that can be used for mapping.
+
+
+### USGS/NWSI Ground Water Data
+
+When I worked further on the research, I made some assumptions on reasons that causes the deformation. And, I want to figure out if my assumption is true, so, I need to acquire ground water level data to see if it has some pattern with ground subsidence.
+
+For this part of data, we can acquire it on [USGS/NWSI Ground Water Daily Data](https://waterdata.usgs.gov/ca/nwis/dv/?referred_module=gw)
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/USGS_GroundWater.png)
+
+**NWSI** *(National Water Information System)* is a platform for users to download open data. And the workflow for NWSI is we need to filter the site as we need, and download available sites list in a form of **RDB1**. It's a csv format file that contains list of name for available sites. 
+
+After acquring the **RDB1** file from NWSI, we need to use this file in R with a R package `dataRetrieval` developed by USGS. You can find [Manual of this Package](https://drive.google.com/file/d/1lBg2TS7TkiZp7EF5_vykjPv7txSJyQ2F/view?usp=drive_link) here. Here is an example of how we run the package.
+
+``` {r, result = "hide", warning = FALSE, message = FALSE}
+library(dataRetrieval)
+
+para_code = readNWISpCode("all") #Check available parameters code for downloading water data by attributes
+
+userrdb = importRDB1("D:/EAS548/Final Project/dv")
+
+Cal_data = readNWISgwl(
+  siteNumbers = userrdb$site_no,
+  startDate = "2013-01-01",
+  endDate = "2023-01-01",
+  parameterCd = "72019",
+  convertType = TRUE,
+  tz = "UTC"
+)#Downloading Groundwater Level data.
+```
+
+## Workflow of the research
+Below is the workflow diagram of this research, some parts will be discussed later.
+
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/workflow.png)
+
+## Processed Data
+### GPS Ground Deformation Data: Unit Meter
+- .gpx point feature data
+- .csv include site number, site height difference(*positive is risen, negative is subsidence*).
+
+### Ground Water Data: Unit Meter
+- .csv include site number, site name, site longitude, site latitude, Groundwater Level Difference(*positive is indicating groundwater level became lower, negative is became higher*)
+
+## Geovisualization--Interpolating 
+
+### Why Interpolating? 
+What we have is some point feature with some interesting attributes. However, a surface can best show the trend wether California is rising or not. To generate the surface, we need to use interpolating to fill up the blank space of data. And we can find all kinds of interpolating tools in some mainstream GIS softwware. And for this research, I'd like to use Kriging interpolation.
+
+### Why Kriging?
+Kriging also known as Gaussian process regression, is a method of interpolation based on Gaussian process governed by **prior covariances**. Under suitable assumptions of the prior, **kriging gives the best linear unbiased prediction when data are continuous and have spatial autocorrelation**.
+
+![Interpolation map of ground deformation](/Users/qihangsun/Documents/EAS 648/Lab 1/Interpolation.png)
+
+## Geovisualization-- Reclassify and Clip
+To maximum the difference between categories, I manually set the break according to the histogram of interpolated raster data. After that, I polygonized the raster, and clipped them by the California county boundaries.
+Resualts are listed below.
+
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/clip.png)
+
+## Geovisualization -- Map Layout
+
+```{r, result = "hide", warning = FALSE, message = FALSE}
+  library(sf)
+  library(ggplot2)
+  library(ggspatial)
+  library(magrittr)
+  library(viridis)
+  library(dplyr)
+  
+  gd_clipped = read_sf("/Users/qihangsun/Documents/EAS 648/Lab 1/Clipped_Total_Site_Deformation.gpkg")
+  gw_clipped = read_sf("/Users/qihangsun/Documents/EAS 648/Lab 1/Clipped_GW.gpkg")
+  # read boundary
+  california_counties <- st_read("/Users/qihangsun/Documents/EAS 648/Lab 1/CA_Counties/CA_Counties_TIGER2016.shp")
+
+gd_clipped <- gd_clipped %>% arrange(DN)
+gd_clipped$Label <- case_when(
+  gd_clipped$DN == 0 ~ "-3 ~ 0",
+  gd_clipped$DN == 1 ~ "0 ~ 2",
+  gd_clipped$DN == 2 ~ "2 ~ 5",
+  gd_clipped$DN == 3 ~ "5 ~ 9",
+  gd_clipped$DN == 4 ~ "9 ~ 15",
+  gd_clipped$DN == 5 ~ "15 ~ 20",
+  gd_clipped$DN == 6 ~ "20 ~ 27",
+  gd_clipped$DN == 7 ~ "27 ~ 34",
+  gd_clipped$DN == 8 ~ "34 ~ 42",
+  gd_clipped$DN == 9 ~ "42 ~ 51",
+  TRUE ~ "Other Categories"  # default label
+)
+
+# color dictionary
+color_mapping <- data.frame(
+  Label = unique(gd_clipped$Label),
+  Color = viridis_pal(option = "magma")(length(unique(gd_clipped$Label)))
+)
+county_centers <- st_centroid(california_counties)
+
+# Define CRS
+target_crs <- st_crs("+proj=lcc +lat_1=33.9 +lat_2=32.7 +lat_0=32 +lon_0=-116.9 +x_0=2000000 +y_0=500000.0000000002 +datum=NAD83 +units=us-ft +no_defs")
+
+# Project
+gd_clipped <- st_transform(gd_clipped, target_crs)
+gw_clipped <- st_transform(gw_clipped, target_crs)
+california_counties <- st_transform(california_counties, target_crs)
+county_centers <- st_transform(county_centers, target_crs)
+
+colnames(county_centers)[colnames(county_centers) == "INTPTLON"] <- "Longitude"
+colnames(county_centers)[colnames(county_centers) == "INTPTLAT"] <- "Latitude"
+
+# ggplot
+terrain_plot <- ggplot() +
+  geom_sf(data = gd_clipped, aes(fill = Label)) + 
+  scale_fill_manual(values = color_mapping$Color, breaks = unique(gd_clipped$Label)) +  # Color and Order
+  annotation_scale(location = "bl", width_hint = 0.2) +
+  annotation_north_arrow(location = "tr", which_north = "true", style = north_arrow_fancy_orienteering) +
+  labs(title = "Ground Deformation of California", fill = "Ground Deformation (Unit: mm)") +  # Legend Title
+  theme(legend.position = "bottom")+
+  geom_sf(data = california_counties,color = "black", fill = "transparent")+  # 绘制县边界
+  geom_text(data = county_centers, aes(x = Longitude , y = Latitude, label = NAME), nudge_y = 0.1, size = 2) +
+coord_sf(crs = st_crs(county_centers), lims = "geometry_bbox") +
+  theme_minimal()
+
+
+terrain_plot
+```
+
+
+
