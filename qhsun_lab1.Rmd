@@ -88,13 +88,41 @@ Kriging also known as Gaussian process regression, is a method of interpolation 
 ![Interpolation map of ground deformation](/Users/qihangsun/Documents/EAS 648/Lab 1/Interpolation.png)
 
 ## Geovisualization-- Reclassify and Clip
-To maximum the difference between categories, I manually set the break according to the histogram of interpolated raster data. After that, I polygonized the raster, and clipped them by the California county boundaries.
+To maximum the difference between categories, I manually set the break according to the histogram of interpolated raster data. 
+
+```{r, result = "hide", warning = FALSE, message = FALSE}
+library(ggplot2)
+library(sf)
+library(dplyr)
+  gd_clipped = read_sf("/Users/qihangsun/Documents/EAS 648/Lab 1/Clipped_Total_Site_Deformation.gpkg")
+  gd_clipped$Label <- case_when(
+  gd_clipped$DN == 0 ~ "-3 ~ 0",
+  gd_clipped$DN == 1 ~ "0 ~ 2",
+  gd_clipped$DN == 2 ~ "2 ~ 5",
+  gd_clipped$DN == 3 ~ "5 ~ 9",
+  gd_clipped$DN == 4 ~ "9 ~ 15",
+  gd_clipped$DN == 5 ~ "15 ~ 20",
+  gd_clipped$DN == 6 ~ "20 ~ 27",
+  gd_clipped$DN == 7 ~ "27 ~ 34",
+  gd_clipped$DN == 8 ~ "34 ~ 42",
+  gd_clipped$DN == 9 ~ "42 ~ 51",
+  TRUE ~ "Other Categories"  # default label
+)
+ggplot(data = gd_clipped, aes(x = as.factor(Label))) +
+  geom_bar(fill = "blue", color = "black") +
+  labs(title = "Histogram of Deformation", x = "Deformation Value", y = "Frequency") +
+  theme_minimal()
+
+
+```
+
+After that, I polygonized the raster, and clipped them by the California county boundaries.
 Resualts are listed below.
 
 ![](/Users/qihangsun/Documents/EAS 648/Lab 1/clip.png)
 
 ## Geovisualization -- Map Layout
-
+### Method 1: Rstudio
 ```{r, result = "hide", warning = FALSE, message = FALSE}
   library(sf)
   library(ggplot2)
@@ -148,10 +176,10 @@ terrain_plot <- ggplot() +
   scale_fill_manual(values = color_mapping$Color, breaks = unique(gd_clipped$Label)) +  # Color and Order
   annotation_scale(location = "bl", width_hint = 0.2) +
   annotation_north_arrow(location = "tr", which_north = "true", style = north_arrow_fancy_orienteering) +
-  labs(title = "Ground Deformation of California", fill = "Ground Deformation (Unit: mm)") +  # Legend Title
-  theme(legend.position = "bottom")+
-  geom_sf(data = california_counties,color = "black", fill = "transparent")+  # 绘制县边界
-  geom_text(data = county_centers, aes(x = Longitude , y = Latitude, label = NAME), nudge_y = 0.1, size = 2) +
+  labs(title = "Ground Deformation of California, 2021~2023", fill = "Ground Deformation (Unit: mm)",caption = "Source: USGS Earthquake Hazard Program\nMap Layout: Chi Sun") +  # Legend Title
+  theme(legend.position = "bottom", plot.caption = element_text(hjust = 0))+
+  geom_sf(data = california_counties,color = "white", fill = "transparent")+  
+  geom_text(data = county_centers, aes(x = Longitude , y = Latitude, label = NAMELSAD), nudge_y = 0.1, size = 20) +
 coord_sf(crs = st_crs(county_centers), lims = "geometry_bbox") +
   theme_minimal()
 
@@ -159,5 +187,57 @@ coord_sf(crs = st_crs(county_centers), lims = "geometry_bbox") +
 terrain_plot
 ```
 
+There is some problems with the code:
+```{}
+geom_text(data = county_centers, aes(x = Longitude , y = Latitude, label = NAMELSAD), nudge_y = 0.1, size = 20)
+```
+
+I tired to put the county name on the polygons' centroid, but it does not work. I tried to solve this problem by changing bbox, crs, I failed.
+
+### Method 2: QGIS
+Here is the geovisualization done by QGIS
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/QGIS.png)
+
+## Summary
+Overall, the surface of California is rising, with only a small portion experiencing a descent. This part is displayed in the insert map in detail by remote sensing image.
+So, what cause the subsidence of this part of California? I checked the Ground water level of Central California and mapped this. And there is no strong pattern shown between these two factors (subsidence and ground water level)
+
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/Mix.png)
+
+## Appendix
+[Google Drive](https://drive.google.com/drive/folders/1QUoPpe58LBL8HFgC4a8AikT0fh7Se3jq?usp=drive_link)
 
 
+|          Content         |                                           Link                                          |
+|:------------------------:|:---------------------------------------------------------------------------------------:|
+| R package manual         | https://drive.google.com/drive/folders/17wLkDHFi5tLtGsfJ1f6--jRGn3mrAyRN?usp=drive_link |
+| R Script                 | https://drive.google.com/drive/folders/1ZNchQYXtphhWxgbNIKai2Cc1nd12cSth?usp=drive_link |
+| ITRF Timeseries GPS file | https://drive.google.com/drive/folders/1ugz2g5LBPv6caO8tBGs934eC1GFPAZd6?usp=drive_link |
+| Map                      | https://drive.google.com/drive/folders/1neIfrgAmb-CgrJK9Xix6L2nO4dt2wWva?usp=drive_link |
+| Shapefile and Geopackage | https://drive.google.com/drive/folders/1OTriIUOc9sgBaT4XL1KBPa9pD8_WhrZi?usp=drive_link |
+
+
+
+
+
+# Questions of Assignment 1
+## Advantages and challenges associated with an open data science
+### Advantages
+- It provides more richly, very detailed, real-time data, for helping in the betterment of urban planning, management of traffic, and the protection of environment.
+**Example: Optimizing urban traffic systems by monitoring population movements on social media**
+
+- For social sciences and human geography, it offers more data resources, so that can to support more complex models and research methods.
+
+- It gives new opportunities, like computational social science, interdisciplinary research, and extending research fields.
+
+
+### Challenges
+
+- Privacy is a major challenge, especially when using big data, in urban monitoring and collecting data, it may infringe personal privacy.
+
+- The requirementfor computational and storage resources is huge, so it forms challenges for city and research organizations' budgets.
+
+- It can result in over-relying on the data itself, neglecting the theories and domain-specific knowledge behind.
+
+## Bonus Screen Shot:
+![](/Users/qihangsun/Documents/EAS 648/Lab 1/bonus.png)
